@@ -1,81 +1,189 @@
-# Mivra: DigitalOcean Droplet Hosting Guide
+# Deploying to a DigitalOcean Droplet
 
-This app is designed to run behind **Nginx + PHP-FPM** on Ubuntu 22.04/24.04.
+This guide shows two reliable ways to deploy the **Mivra** lightweight PHP framework on a fresh Ubuntu 22.04/24.04 droplet.
 
-## 1) Prepare the Droplet
+- **Path A (fast):** use the provided scripts in `deploy/`
+
+> Replace values in **ALL CAPS** with your own (e.g., `YOUR_DROPLET_IP`, `mivra.example.com`).
+
+---
+
+## Prerequisites
+
+- A DigitalOcean droplet running **Ubuntu 22.04 or 24.04** (Basic plan is fine)
+- Your project files on GitHub
+- A subdomain pointing to the droplet (e.g., `mivra.example.com`)
+- GitHub CLI installed on the droplet to clone private repos:
+  ```bash
+  apt-get install -y gh
+  gh auth login
+  ```
+
+---
+
+## DNS Setup (before you start)
+
+Create these **DNS records** at your DNS provider (where your domain's nameservers live):
+
+| Type              | Host/Name | Value               | TTL |
+| ----------------- | --------- | ------------------- | --- |
+| A                 | `mivra`   | `YOUR_DROPLET_IPV4` | 300 |
+| AAAA _(optional)_ | `mivra`   | `YOUR_DROPLET_IPV6` | 300 |
+
+> If you **don’t** use IPv6, **do not** create an AAAA record. If one exists pointing elsewhere, delete it. IPv6 pointing to the wrong server will cause Let’s Encrypt failures.
+
+---
+
+## Path A - Quick Install with Provided Scripts
+
+**1) SSH into the droplet**
+
 ```bash
-ssh root@YOUR_IP
+ssh root@YOUR_DROPLET_IP
 apt-get update && apt-get upgrade -y
 ```
 
-## 2) Install stack and configure
-Copy the project to the droplet (via `git clone` or `scp`), then run:
+**2) Get the app onto the server**
+
+- Using **git**:
+  ```bash
+  cd /var/www && git clone https://github.com/YOU/mivra.git
+  cd /var/www/mivra
+  ```
+
+**3) Run the setup script**
 
 ```bash
-cd /var/www && git clone https://github.com/YOU/mivra.git
-cd mivra
+cd /var/www/mivra
+```
+
+If you hit "php: command not found", install php-cli first:
+
+```bash
+apt-get install -y php-cli
 sudo ./deploy/setup_ubuntu.sh
 ```
 
-Edit `deploy/nginx.mivra.conf` and set `server_name` to your domain or IP, then:
+This installs **Nginx + PHP‑FPM**, PHP extensions, firewall rules, and the site config.
+
+**4) Set your domain in Nginx**
 
 ```bash
+sudo sed -i 's/server_name YOUR_DOMAIN_OR_IP;/server_name mivra.example.com;/' deploy/nginx.mivra.conf
+sudo cp deploy/nginx.mivra.conf /etc/nginx/sites-available/mivra.conf
+sudo ln -sf /etc/nginx/sites-available/mivra.conf /etc/nginx/sites-enabled/mivra.conf
+sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-## 3) Environment
-Create an `.env` file in the project root based on `.env.example`:
+**5) Create .env file**
 
-```
-APP_ENV=production
-APP_DEBUG=false
-APP_URL=https://your.domain
-DB_HOST=127.0.0.1
-DB_NAME=mivra
-DB_USER=mivra_user
-DB_PASS=secure_password
-DB_PORT=3306
-```
-
-## 4) Database
-Create DB and user:
-```sql
-CREATE DATABASE mivra CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'mivra_user'@'localhost' IDENTIFIED BY 'secure_password';
-GRANT ALL PRIVILEGES ON mivra.* TO 'mivra_user'@'localhost';
-FLUSH PRIVILEGES;
-```
-
-## 5) SSL (Let's Encrypt)
 ```bash
-sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d your.domain
+cp .env.example .env
+nano .env
 ```
 
-## 6) Directory Permissions
-Ensure web server can read the app and write to storage if used:
+Set APP*URL=https://mivra.example.com and DB*\* values
+
+**6) Permissions & reload**
+
 ```bash
 sudo chown -R www-data:www-data /var/www/mivra
 sudo find /var/www/mivra -type f -exec chmod 0644 {} \;
 sudo find /var/www/mivra -type d -exec chmod 0755 {} \;
+PHPV=$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')
+sudo systemctl reload php${PHPV}-fpm
+sudo systemctl reload nginx
 ```
 
-## 7) Zero-downtime deploys (optional)
-Use the provided `deploy_local_to_server.sh` to rsync changes from a build machine (run on the droplet after uploading code).
+**7) HTTPS with Let’s Encrypt**
+
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d mivra.example.com
+```
+
+Done. Visit `https://mivra.example.com`.
 
 ---
 
-### Nginx quick check
-- `root` points to `/var/www/mivra/public`
-- `try_files` sends unknown routes to `index.php`
-- PHP handled by `php8.3-fpm` socket (adjust if your version differs)
+## Verifying the Deployment
 
-### Apache fallback
-A `.htaccess` is included in `public/` for Apache with mod_rewrite. For Nginx you **do not** use `.htaccess`.
+```bash
+curl -I http://mivra.example.com
+curl -I https://mivra.example.com
+```
 
-### Hardening tips
-- Keep `APP_DEBUG=false` in production.
-- Deny access to hidden files if serving via Apache.
-- Ensure `public/` is the only web root; the rest should not be web-accessible.
-- Set up automatic security updates: `sudo dpkg-reconfigure -plow unattended-upgrades`.
-- Monitor logs: `/var/log/nginx/*.log` and `/var/log/php*.log`.
+You should see `HTTP/1.1 200` (HTTP) and `HTTP/2 200` (HTTPS).
+
+Logs to check:
+
+- Nginx: `/var/log/nginx/mivra.access.log`, `/var/log/nginx/mivra.error.log`
+- PHP‑FPM: `/var/log/php*-fpm.log`
+
+---
+
+## Updating the App (Zero‑Downtime Rsync)
+
+From your workstation:
+
+```bash
+rsync -a --delete --exclude '.git' ./ root@YOUR_DROPLET_IP:/var/www/mivra/
+ssh root@YOUR_DROPLET_IP "PHPV=\$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;'); systemctl reload php\${PHPV}-fpm; systemctl reload nginx"
+```
+
+Or on the droplet using the provided helper:
+
+```bash
+cd /var/www/mivra
+sudo ./deploy/deploy_local_to_server.sh
+```
+
+---
+
+## Common Pitfalls & Fixes
+
+- **Let’s Encrypt fails with**: Your **AAAA (IPv6)** record likely points elsewhere. Delete bad AAAA or set it to the droplet’s real IPv6.
+- **502 Bad Gateway**: FastCGI socket mismatch. Update `fastcgi_pass` to the actual `phpX.Y-fpm.sock` and reload Nginx.
+- **404 on every route**: Ensure `root /var/www/mivra/public;` and `try_files $uri $uri/ /index.php?$query_string;` are present.
+- **Blank page**: Temporarily set `APP_DEBUG=true` in `.env`, test again, then turn it back **off** in production.
+- **Nginx ignores**: Expected - `.htaccess` is for Apache only. Nginx uses the server block above.
+
+---
+
+## Security & Hardening Tips
+
+- Keep `APP_DEBUG=false` in production
+- Apply security updates regularly or enable unattended upgrades
+- Limit SSH to key auth; disable password logins
+- Restrict write perms; only `www-data` should own files served by Nginx
+- Rotate logs and back up your DB regularly
+
+---
+
+## Switching Domains Later
+
+- Update DNS A/AAAA for the new subdomain
+- Change `server_name` in `/etc/nginx/sites-available/mivra.conf`
+- Update `APP_URL` in `.env`
+- Re‑issue SSL: `certbot --nginx -d new.example.com`
+
+---
+
+## Uninstall / Rollback
+
+Disable and remove the site
+
+```bash
+rm -f /etc/nginx/sites-enabled/mivra.conf
+rm -f /etc/nginx/sites-available/mivra.conf
+nginx -t && systemctl reload nginx
+```
+
+(Optional) remove app
+
+```bash
+rm -rf /var/www/mivra
+```
+
+---
