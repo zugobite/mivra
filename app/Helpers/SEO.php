@@ -5,33 +5,43 @@ namespace App\Helpers;
 /**
  * Class Seo
  *
- * A lightweight SEO helper for managing and rendering
- * HTML head tags, Open Graph tags, Twitter cards,
- * and JSON-LD structured data.
+ * SEO metadata builder for PHP views.
  *
- * This class follows a fluent interface pattern, allowing
- * chainable configuration of SEO attributes.
+ * Generates `<title>`, `<meta>` tags, Open Graph (OG) tags, Twitter Cards,
+ * JSON-LD schema, and any additional custom head tags.
+ *
+ * **Supported features:**
+ * - Title, description, canonical URL, robots meta
+ * - Open Graph title/description/URL/site_name/locale/image
+ * - Twitter Card metadata (summary or summary_large_image)
+ * - Multiple JSON-LD schema objects
+ * - Arbitrary extra head tags
+ *
+ * **Usage Example:**
+ * ```php
+ * use App\Helpers\Seo;
+ *
+ * $seo = Seo::make()
+ *   ->title('Home — My Site')
+ *   ->description('Welcome to my site.')
+ *   ->canonical('https://example.com')
+ *   ->image('https://example.com/img/cover.jpg')
+ *   ->twitter('@myhandle')
+ *   ->addJsonLd([
+ *       '@context' => 'https://schema.org',
+ *       '@type'    => 'WebSite',
+ *       'name'     => 'My Site',
+ *       'url'      => 'https://example.com'
+ *   ]);
+ *
+ * echo $seo->toHeadHtml();
+ * ```
  *
  * @package App\Helpers
  */
-final class SEO
+final class Seo
 {
-    /**
-     * Internal SEO data store.
-     *
-     * @var array{
-     *     title: string|null,
-     *     description: string|null,
-     *     canonical: string|null,
-     *     robots: string|null,
-     *     image: string|null,
-     *     locale: string|null,
-     *     site_name: string|null,
-     *     twitter: string|null,
-     *     jsonld: array<int,array<string,mixed>>,
-     *     extras: array<int,string>
-     * }
-     */
+    /** @var array<string,mixed> Default SEO data structure. */
     private array $data = [
         'title'       => null,
         'description' => null,
@@ -39,158 +49,88 @@ final class SEO
         'robots'      => 'index,follow',
         'image'       => null,
         'locale'      => 'en_ZA',
-        'site_name'   => 'Mivra',
+        'site_name'   => 'Mivra Micro',
         'twitter'     => '@yoursite',
         'jsonld'      => [],
         'extras'      => [],
     ];
 
     /**
-     * Create a new SEO instance with optional overrides.
+     * Factory method to create a Seo instance with optional overrides.
      *
-     * @param array<string,mixed> $overrides
+     * @param array<string,mixed> $overrides Key-value overrides for default SEO data.
      * @return self
      */
     public static function make(array $overrides = []): self
     {
-        $seo = new self();
-        $seo->data = array_replace($seo->data, $overrides);
-        return $seo;
+        $s = new self();
+        $s->data = array_replace($s->data, $overrides);
+        return $s;
     }
 
-    /**
-     * Set the page title.
-     *
-     * @param string $v
-     * @return self
-     */
-    public function title(string $v): self
+    /** @return $this */ public function title(string $v): self
     {
         $this->data['title'] = $v;
         return $this;
     }
-
-    /**
-     * Set the page description (meta description).
-     *
-     * @param string $v
-     * @return self
-     */
-    public function description(string $v): self
+    /** @return $this */ public function description(string $v): self
     {
         $this->data['description'] = $v;
         return $this;
     }
-
-    /**
-     * Set the canonical URL.
-     *
-     * @param string $v
-     * @return self
-     */
-    public function canonical(string $v): self
+    /** @return $this */ public function canonical(string $v): self
     {
         $this->data['canonical'] = $v;
         return $this;
     }
-
-    /**
-     * Set the robots meta tag value.
-     *
-     * @param string $v
-     * @return self
-     */
-    public function robots(string $v): self
+    /** @return $this */ public function robots(string $v): self
     {
         $this->data['robots'] = $v;
         return $this;
     }
-
-    /**
-     * Set the preview image URL.
-     *
-     * @param string|null $v
-     * @return self
-     */
-    public function image(?string $v): self
+    /** @return $this */ public function image(?string $v): self
     {
         $this->data['image'] = $v;
         return $this;
     }
-
-    /**
-     * Set the Open Graph locale.
-     *
-     * @param string $v
-     * @return self
-     */
-    public function locale(string $v): self
+    /** @return $this */ public function locale(string $v): self
     {
         $this->data['locale'] = $v;
         return $this;
     }
-
-    /**
-     * Set the Open Graph site name.
-     *
-     * @param string $v
-     * @return self
-     */
-    public function siteName(string $v): self
+    /** @return $this */ public function siteName(string $v): self
     {
         $this->data['site_name'] = $v;
         return $this;
     }
-
-    /**
-     * Set the Twitter handle.
-     *
-     * @param string $v
-     * @return self
-     */
-    public function twitter(string $v): self
+    /** @return $this */ public function twitter(string $v): self
     {
         $this->data['twitter'] = $v;
         return $this;
     }
-
-    /**
-     * Add a JSON-LD schema object.
-     *
-     * @param array<string,mixed> $schema
-     * @return self
-     */
-    public function addJsonLd(array $schema): self
+    /** @return $this */ public function addJsonLd(array $schema): self
     {
         $this->data['jsonld'][] = $schema;
         return $this;
     }
-
-    /**
-     * Add a raw HTML tag string to be included in head.
-     *
-     * @param string $tagHtml
-     * @return self
-     */
-    public function addExtra(string $tagHtml): self
+    /** @return $this */ public function addExtra(string $tagHtml): self
     {
         $this->data['extras'][] = $tagHtml;
         return $this;
     }
 
     /**
-     * Render all configured SEO tags as a string of HTML.
+     * Render all SEO tags as a string of HTML.
      *
-     * @return string
+     * @return string HTML for <head> section.
      */
     public function toHeadHtml(): string
     {
         $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
         $d = $this->data;
-
         $out = [];
 
-        // Basic meta
+        // Basic meta tags
         if ($d['title'])       $out[] = '<title>' . $e($d['title']) . '</title>';
         if ($d['description']) $out[] = '<meta name="description" content="' . $e($d['description']) . '">';
         if ($d['robots'])      $out[] = '<meta name="robots" content="' . $e($d['robots']) . '">';
@@ -214,15 +154,17 @@ final class SEO
         if ($d['description']) $out[] = '<meta name="twitter:description" content="' . $e($d['description']) . '">';
         if ($d['image'])       $out[] = '<meta name="twitter:image" content="' . $e($d['image']) . '">';
 
-        // JSON-LD
+        // JSON-LD scripts
         foreach ($d['jsonld'] as $schema) {
-            $out[] = '<script type="application/ld+json">' .
-                json_encode($schema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) .
-                '</script>';
+            $out[] = '<script type="application/ld+json">'
+                . json_encode($schema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+                . '</script>';
         }
 
-        // Custom extras
-        foreach ($d['extras'] as $raw) $out[] = $raw;
+        // Extra raw tags
+        foreach ($d['extras'] as $raw) {
+            $out[] = $raw;
+        }
 
         return implode("\n    ", $out);
     }
