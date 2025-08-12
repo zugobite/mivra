@@ -1,0 +1,97 @@
+:root {
+  --bg: #0b1021;
+  --surface: #121735;
+  --text: #e8eafd;
+  --muted: #b9bced;
+  --primary: #6c8cff;
+  --accent: #a78bfa;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.6 system-ui, Segoe UI, Roboto, Ubuntu, sans-serif;
+}
+
+.container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.header,
+.footer {
+  background: var(--surface);
+  padding: 0.75rem 0;
+}
+
+.brand {
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.nav-link {
+  color: var(--muted);
+  text-decoration: none;
+  margin-left: 1rem;
+}
+
+.nav-link:hover {
+  color: var(--text);
+}
+
+.hero {
+  padding: 4rem 0;
+}
+
+.btn {
+  display: inline-block;
+  background: var(--primary);
+  color: #fff;
+  padding: 0.6rem 1rem;
+  border-radius: 0.5rem;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+}
+
+.btn:hover {
+  filter: brightness(1.1);
+}
+
+.stack {
+  display: grid;
+  gap: 0.75rem;
+}
+
+input,
+textarea {
+  width: 100%;
+  padding: 0.6rem;
+  border-radius: 0.4rem;
+  border: 1px solid #2b3160;
+  background: #0f1533;
+  color: var(--text);
+}
+
+.flex {
+  display: flex;
+}
+
+.between {
+  justify-content: space-between;
+}
+
+.center {
+  text-align: center;
+}
+
+.app-main {
+  min-height: 100vh;
+}
